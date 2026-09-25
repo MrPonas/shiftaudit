@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShiftAudit — On-Call & Overtime Pay Checker</title>
+<meta name="description" content="Log overtime, night, weekend, holiday and standby hours. ShiftAudit computes what your payslip should show and flags every gap. Works offline, your data never leaves your device.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M9 17l4 4 10-10' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --panel2:#f0f2f5; --line:#e3e6ea; --text:#15191f; --muted:#5f6b7a;
+  --accent:#0f766e; --accent-ink:#ffffff; --accent-soft:#e0f2f0;
+  --ok:#15803d; --ok-soft:#e5f6ea; --warn:#b45309; --warn-soft:#fff3e0; --bad:#b91c1c; --bad-soft:#fdeaea;
+  --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.05),0 6px 20px -12px rgba(0,0,0,.18);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#0e1116; --panel:#161a21; --panel2:#1d222b; --line:#2a303a; --text:#e8ebef; --muted:#9aa5b4;
+  --accent:#2dd4bf; --accent-ink:#06251f; --accent-soft:#12302d;
+  --ok:#4ade80; --ok-soft:#10301b; --warn:#fbbf24; --warn-soft:#3a2a08; --bad:#f87171; --bad-soft:#3b1414;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1116; --panel:#161a21; --panel2:#1d222b; --line:#2a303a; --text:#e8ebef; --muted:#9aa5b4;
+  --accent:#2dd4bf; --accent-ink:#06251f; --accent-soft:#12302d;
+  --ok:#4ade80; --ok-soft:#10301b; --warn:#fbbf24; --warn-soft:#3a2a08; --bad:#f87171; --bad-soft:#3b1414;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 var(--sans)}
+body{min-height:100vh}
+a{color:var(--accent)}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0 0 .5rem;line-height:1.2}
+h2{font-size:1.15rem} h3{font-size:1rem}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px 48px}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:14px;padding:10px 16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.05rem;letter-spacing:-.01em}
+.brand .logo{width:28px;height:28px;border-radius:7px;background:var(--accent);display:grid;place-items:center;flex:none}
+.brand .logo svg{width:18px;height:18px}
+.brand small{display:block;font-weight:500;color:var(--muted);font-size:.72rem;letter-spacing:0}
+nav.tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+nav.tabs button{background:transparent;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;color:var(--muted);font-weight:600}
+nav.tabs button[aria-selected="true"]{background:var(--panel);color:var(--text);box-shadow:var(--shadow)}
+nav.tabs button:hover{color:var(--text)}
+.demo-banner{background:var(--warn-soft);color:var(--text);border-bottom:1px solid var(--line);font-size:.9rem}
+.demo-banner .wrap{padding:8px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.demo-banner .wrap a.btn{margin-left:auto}
+main{padding-top:20px}
+section[role="tabpanel"]{display:none}
+section[role="tabpanel"].active{display:block}
+.grid{display:grid;gap:16px}
+.grid>*{min-width:0}
+.grid.two{grid-template-columns:1fr 1fr}
+.grid.three{grid-template-columns:repeat(3,1fr)}
+@media (max-width:760px){.grid.two,.grid.three{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+.card.flat{box-shadow:none}
+.card h2{display:flex;align-items:center;gap:8px}
+.card h2 .hint{margin-left:auto;font-size:.8rem;color:var(--muted);font-weight:500}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:.78rem;color:var(--muted);font-weight:600;letter-spacing:.01em}
+.field input,.field select,.field textarea{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;width:100%}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+.field.sm{width:120px} .field.md{width:170px} .field.grow{flex:1 1 180px}
+.field .sub{font-size:.75rem;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 13px;cursor:pointer;font-weight:600;text-decoration:none;color:var(--text);white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:4px 9px;font-size:.82rem}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:640px){.stats{grid-template-columns:1fr}}
+.stat{background:var(--panel2);border-radius:10px;padding:12px 14px}
+.stat .k{font-size:.75rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.stat .v{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stat .v.ok{color:var(--ok)} .stat .v.bad{color:var(--bad)} .stat .v.warn{color:var(--warn)}
+.stat .s{font-size:.8rem;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.num input{width:110px;text-align:right}
+tr.total td{font-weight:700;border-top:2px solid var(--line)}
+.tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:600;background:var(--panel2);color:var(--muted);white-space:nowrap}
+.tag.overtime{background:var(--accent-soft);color:var(--accent)}
+.tag.standby{background:#eef;color:#4b4bb8} :root[data-theme="dark"] .tag.standby,:root:not([data-theme="light"]) .tag.standby{background:#24264a;color:#a5a8ff}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .tag.standby{background:#eef;color:#4b4bb8}}
+.tag.callout{background:var(--warn-soft);color:var(--warn)}
+.tag.holiday,.tag.weekend{background:var(--bad-soft);color:var(--bad)}
+.gap{font-weight:700}
+.gap.under{color:var(--bad)} .gap.over{color:var(--ok)} .gap.zero{color:var(--muted)}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.card{min-width:0;max-width:100%}
+main.wrap{overflow-x:clip}
+.muted{color:var(--muted)} .small{font-size:.85rem}
+.empty{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}
+.notice{padding:10px 12px;border-radius:8px;background:var(--accent-soft);font-size:.9rem;margin:8px 0}
+.notice.warn{background:var(--warn-soft)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.month-nav{display:flex;align-items:center;gap:6px}
+.month-nav input[type=month]{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-weight:600}
+details{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:8px 0;background:var(--panel)}
+details summary{cursor:pointer;font-weight:600}
+details p{margin:.5rem 0}
+kbd{font-family:var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:0 5px;font-size:.85em}
+.breakdown{font-family:var(--mono);font-size:.78rem;color:var(--muted);white-space:nowrap}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.toast.show{opacity:1}
+footer{margin-top:40px;color:var(--muted);font-size:.82rem;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+footer a{color:var(--muted)}
+.theme-btn{background:transparent;border:1px solid var(--line);border-radius:8px;width:34px;height:34px;cursor:pointer;display:grid;place-items:center}
+.print-only{display:none}
+@media (max-width:640px){
+  header.top .wrap{gap:8px}
+  nav.tabs{order:3;width:100%;margin-left:0}
+  .theme-btn{margin-left:auto}
+  .rate-col{display:none}
+  td.num input{width:84px}
+}
+@media print{
+  :root,:root:not([data-theme="light"]),:root[data-theme="dark"]{--bg:#fff;--panel:#fff;--panel2:#f3f4f6;--line:#d0d4da;--text:#000;--muted:#555;--accent:#0f766e;--accent-soft:#e0f2f0;--ok:#15803d;--bad:#b91c1c;--warn:#b45309;--ok-soft:#eee;--bad-soft:#eee;--warn-soft:#eee}
+  header.top,nav.tabs,.demo-banner,.no-print,footer,.theme-btn,.toast,#entryCard,#yearCard{display:none!important}
+  body{background:#fff;color:#000;font-size:12px}
+  .card{box-shadow:none;border-color:#ccc;break-inside:avoid}
+  main{display:flex;flex-direction:column}
+  section[role="tabpanel"]{display:none!important}
+  section#panel-summary{display:block!important;order:1}
+  section#panel-log{display:block!important;order:2;margin-top:16px}
+  .print-only{display:block}
+  td.num input{border:0;background:transparent;padding:0;width:auto;font-weight:600}
+  td.num input::placeholder{color:transparent}
+  .wrap{max-width:none;padding:0}
+  a{color:inherit;text-decoration:none}
+}
+</style>
+</head>
+<body>
+<div id="demoBanner" class="demo-banner" hidden>
+  <div class="wrap">
+    <strong>Free demo</strong>
+    <span>Up to <span id="demoLimit">10</span> entries, exports off. Your data stays in this browser.</span>
+    <a class="btn primary sm" id="buyLink" href="https://ponasslam.gumroad.com/l/shiftaudit" target="_blank" rel="noopener">Get the full version</a>
+  </div>
+</div>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 17l4 4 10-10" fill="none" stroke="currentColor" style="color:var(--accent-ink)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div>ShiftAudit<small>On-call &amp; overtime pay checker</small></div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" data-tab="log" aria-selected="true">Log</button>
+      <button role="tab" data-tab="summary" aria-selected="false">Summary</button>
+      <button role="tab" data-tab="rules" aria-selected="false">Pay rules</button>
+      <button role="tab" data-tab="help" aria-selected="false">Help</button>
+    </nav>
+    <button class="theme-btn" id="themeBtn" title="Toggle light/dark" aria-label="Toggle light/dark theme">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ================= LOG ================= -->
+<section id="panel-log" role="tabpanel" class="active">
+  <div class="grid">
+    <div class="card" id="entryCard">
+      <h2>Add an entry <span class="hint">Times are local. An end time earlier than start means it crossed midnight.</span></h2>
+      <form id="entryForm" class="row" autocomplete="off">
+        <input type="hidden" id="eId">
+        <div class="field md"><label for="eDate">Date</label><input type="date" id="eDate" required></div>
+        <div class="field md"><label for="eKind">Type</label>
+          <select id="eKind">
+            <option value="overtime">Overtime work</option>
+            <option value="standby">Standby / on-call (passive)</option>
+            <option value="callout">Call-out (worked while on standby)</option>
+          </select></div>
+        <div class="field sm"><label for="eStart">Start</label><input type="time" id="eStart" required value="18:00"></div>
+        <div class="field sm"><label for="eEnd">End</label><input type="time" id="eEnd" required value="20:00"></div>
+        <div class="field grow"><label for="eNote">Note (optional)</label><input type="text" id="eNote" placeholder="Incident #, project, who asked…" maxlength="120"></div>
+        <div class="actions">
+          <button type="submit" class="btn primary" id="saveBtn">Add entry</button>
+          <button type="button" class="btn" id="cancelEdit" hidden>Cancel</button>
+        </div>
+      </form>
+      <div class="small muted" style="margin-top:8px">Quick add: <button type="button" class="btn sm" data-quick="standby-weekend">Weekend standby (Fri 18:00 → Mon 08:00)</button> <button type="button" class="btn sm" data-quick="standby-night">Night standby (18:00 → 08:00)</button></div>
+      <div id="entryPreview" class="breakdown" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Entries
+        <span class="month-nav no-print" style="margin-left:auto">
+          <button class="btn sm" id="prevMonthLog" aria-label="Previous month">‹</button>
+          <input type="month" id="monthLog">
+          <button class="btn sm" id="nextMonthLog" aria-label="Next month">›</button>
+        </span>
+      </h2>
+      <div class="table-wrap">
+        <table id="entriesTable">
+          <thead><tr><th>Date</th><th>Type</th><th>Time</th><th class="num">Hours</th><th>Rate</th><th class="num">Expected</th><th>Note</th><th class="no-print"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="entriesEmpty" class="empty" hidden>No entries this month. Add your first overtime or standby shift above.</div>
+      <div class="actions no-print" style="margin-top:12px">
+        <button class="btn" id="exportCsv">Export CSV</button>
+        <button class="btn" id="importCsvBtn">Import CSV</button>
+        <input type="file" id="importCsv" accept=".csv,text/csv" hidden>
+        <button class="btn" id="backupJson">Backup (JSON)</button>
+        <button class="btn" id="restoreJsonBtn">Restore backup</button>
+        <input type="file" id="restoreJson" accept=".json,application/json" hidden>
+        <span style="flex:1"></span>
+        <button class="btn danger sm" id="clearMonth">Delete this month's entries</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SUMMARY ================= -->
+<section id="panel-summary" role="tabpanel">
+  <div class="grid">
+    <div class="card">
+      <div class="print-only"><h1>ShiftAudit — Pay check report</h1><p class="muted" id="printMeta"></p></div>
+      <h2>Month summary
+        <span class="month-nav no-print" style="margin-left:auto">
+          <button class="btn sm" id="prevMonthSum" aria-label="Previous month">‹</button>
+          <input type="month" id="monthSum">
+          <button class="btn sm" id="nextMonthSum" aria-label="Next month">›</button>
+        </span>
+      </h2>
+      <div class="stats" style="margin:10px 0 16px">
+        <div class="stat"><div class="k">Expected extra pay</div><div class="v" id="sExpected">—</div><div class="s" id="sHours">0 h logged</div></div>
+        <div class="stat"><div class="k">On payslip</div><div class="v" id="sPaid">—</div><div class="s">enter below</div></div>
+        <div class="stat"><div class="k">Gap</div><div class="v" id="sGap">—</div><div class="s" id="sGapNote">expected − paid</div></div>
+      </div>
+      <div class="table-wrap">
+        <table id="summaryTable">
+          <thead><tr><th>Category</th><th class="num">Hours</th><th class="rate-col">Rate</th><th class="num">Expected</th><th class="num">On payslip</th><th class="num">Gap</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="small muted" style="margin:10px 0 0">Type the amounts from your payslip into the "On payslip" column (gross, before tax). If your payslip only shows one combined line for extras, put the whole amount in any row — the total gap is what matters. A positive gap means you were paid less than expected.</p>
+      <div class="field" style="margin-top:10px"><label for="payNote">Payslip note (optional)</label><input type="text" id="payNote" placeholder="e.g. Payslip dated 10 Oct, asked HR on 12 Oct"></div>
+      <div class="actions no-print" style="margin-top:12px">
+        <button class="btn primary" id="printBtn">Print / save PDF report</button>
+        <button class="btn" id="copyHr">Copy message to HR</button>
+      </div>
+    </div>
+
+    <div class="card" id="yearCard">
+      <h2>Year overview <span class="hint" id="yearLabel"></span></h2>
+      <div class="table-wrap">
+        <table id="yearTable">
+          <thead><tr><th>Month</th><th class="num">Hours</th><th class="num">Expected</th><th class="num">On payslip</th><th class="num">Gap</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= RULES ================= -->
+<section id="panel-rules" role="tabpanel">
+  <div class="grid two">
+    <div class="card">
+      <h2>Your pay basis</h2>
+      <div class="row">
+        <div class="field sm"><label for="rCurrency">Currency</label><input id="rCurrency" maxlength="4" value="€"></div>
+        <div class="field md"><label for="rMode">Paid as</label>
+          <select id="rMode"><option value="hourly">Hourly rate</option><option value="monthly">Monthly salary</option></select></div>
+        <div class="field md" id="fHourly"><label for="rRate">Gross hourly rate</label><input type="number" id="rRate" step="0.01" min="0" value="12"></div>
+        <div class="field md" id="fSalary" hidden><label for="rSalary">Gross monthly salary</label><input type="number" id="rSalary" step="1" min="0" value="2000"></div>
+        <div class="field md" id="fSalaryHours" hidden><label for="rSalaryHours">Working hours / month</label><input type="number" id="rSalaryHours" step="1" min="1" value="168"><span class="sub">Your contract or payslip states this (often 160–176).</span></div>
+      </div>
+      <p class="small muted" style="margin-top:8px">Effective base rate: <strong id="rEffective">—</strong> per hour. All multipliers below apply to this.</p>
+
+      <h3 style="margin-top:18px">Multipliers</h3>
+      <div class="row">
+        <div class="field sm"><label for="rOvertime">Overtime, weekday</label><input type="number" id="rOvertime" step="0.05" min="0" value="1.5"></div>
+        <div class="field sm"><label for="rWeekend">Overtime, rest day</label><input type="number" id="rWeekend" step="0.05" min="0" value="2"></div>
+        <div class="field sm"><label for="rHoliday">Overtime, public holiday</label><input type="number" id="rHoliday" step="0.05" min="0" value="2.5"></div>
+        <div class="field sm"><label for="rCallout">Call-out</label><input type="number" id="rCallout" step="0.05" min="0" value="2"><span class="sub">Rest-day / holiday rate applies if higher.</span></div>
+        <div class="field sm"><label for="rNight">Night premium (added)</label><input type="number" id="rNight" step="0.05" min="0" value="0.5"><span class="sub">× base, per night hour, on top of the multiplier.</span></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="field sm"><label for="rNightStart">Night starts</label><input type="time" id="rNightStart" value="22:00"></div>
+        <div class="field sm"><label for="rNightEnd">Night ends</label><input type="time" id="rNightEnd" value="06:00"></div>
+        <div class="field md"><label for="rCalloutMin">Call-out minimum hours</label><input type="number" id="rCalloutMin" step="0.25" min="0" value="1"><span class="sub">Shorter call-outs are paid as this many hours.</span></div>
+        <div class="field md"><label for="rRound">Round durations to</label>
+          <select id="rRound"><option value="0">exact minutes</option><option value="5">5 min</option><option value="15">15 min</option><option value="30">30 min</option><option value="60">1 hour</option></select></div>
+      </div>
+
+      <h3 style="margin-top:18px">Standby / on-call (passive)</h3>
+      <div class="row">
+        <div class="field md"><label for="rStandbyMode">Paid as</label>
+          <select id="rStandbyMode"><option value="percent">% of base rate per hour</option><option value="flat">flat amount per hour</option><option value="daily">flat amount per calendar day</option></select></div>
+        <div class="field sm" id="fStandbyPct"><label for="rStandbyPct">Percent of base</label><input type="number" id="rStandbyPct" step="1" min="0" value="20"></div>
+        <div class="field sm" id="fStandbyFlat" hidden><label for="rStandbyFlat">Amount</label><input type="number" id="rStandbyFlat" step="0.01" min="0" value="2.5"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Calendar</h2>
+      <div class="field"><label>Rest days (weekend)</label>
+        <div class="actions" id="weekendDays">
+          <label><input type="checkbox" value="1"> Mon</label><label><input type="checkbox" value="2"> Tue</label><label><input type="checkbox" value="3"> Wed</label><label><input type="checkbox" value="4"> Thu</label><label><input type="checkbox" value="5"> Fri</label><label><input type="checkbox" value="6" checked> Sat</label><label><input type="checkbox" value="0" checked> Sun</label>
+        </div></div>
+      <div class="field" style="margin-top:10px"><label for="rHolidays">Public holidays (one date per line, YYYY-MM-DD)</label>
+        <textarea id="rHolidays" rows="8" spellcheck="false"></textarea>
+        <span class="sub">Add your country's list. Entries on these dates use the holiday multiplier.</span></div>
+      <div class="actions" style="margin-top:8px">
+        <button class="btn sm" data-holidays="LT-2026">+ Lithuania 2026</button>
+        <button class="btn sm" data-holidays="LT-2027">+ Lithuania 2027</button>
+        <button class="btn sm" data-holidays="clear">Clear</button>
+      </div>
+
+      <h3 style="margin-top:18px">Comparison</h3>
+      <div class="row">
+        <div class="field md"><label for="rTolerance">Ignore gaps smaller than</label><input type="number" id="rTolerance" step="0.5" min="0" value="1"><span class="sub">Rounding noise. In your currency.</span></div>
+      </div>
+
+      <h3 style="margin-top:18px">Presets</h3>
+      <div class="actions">
+        <button class="btn sm" data-preset="lt">Lithuania (Labour Code minimums)</button>
+        <button class="btn sm" data-preset="generic">Generic 1.5× / 2×</button>
+      </div>
+      <p class="small muted" style="margin-top:6px">Presets are a starting point. Your collective agreement or contract may be better than the legal minimum — always enter what <em>your</em> contract says.</p>
+      <div class="actions" style="margin-top:14px">
+        <button class="btn primary" id="saveRules">Save rules</button>
+        <span class="small muted" id="rulesSaved"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= HELP ================= -->
+<section id="panel-help" role="tabpanel">
+  <div class="grid two">
+    <div class="card">
+      <h2>How ShiftAudit calculates</h2>
+      <p>Every entry becomes <em>hours × base rate × multiplier</em>, plus a night premium for the hours that fall inside your night window. Standby is paid at its own rate. Then the month is summed per category and compared with what you type in from your payslip.</p>
+      <details open><summary>Overtime work</summary>
+        <p>Hours between start and end (rounded per your rule). The multiplier depends on the day: weekday overtime, rest day, or public holiday. Night hours inside the entry add the night premium on top.</p>
+        <p class="small muted">Example: 3 h on a Saturday at €12 base, rest-day 2× → 3 × 12 × 2 = €72. If 1 h of it was after 22:00 with a 0.5 night premium → + 1 × 12 × 0.5 = €6. Total €78.</p></details>
+      <details><summary>Standby / on-call (passive)</summary>
+        <p>Time you must be reachable but are not working. Paid per hour as a percentage of base, a flat hourly amount, or a flat daily amount — whatever your contract says. No multipliers or night premium apply.</p></details>
+      <details><summary>Call-out</summary>
+        <p>Actual work done while on standby. Paid at the call-out multiplier, or the rest-day / holiday multiplier if that is higher. Shorter call-outs are lifted to your minimum call-out hours. Night premium applies. Tip: log the standby block <em>and</em> the call-outs separately — most contracts pay both.</p></details>
+      <details><summary>Entries crossing midnight</summary>
+        <p>If the end time is earlier than or equal to the start time, the entry ends the next day. The day type (weekday / rest day / holiday) is taken from the start date. For a long weekend standby, use the quick-add button — it creates one entry per day so each day is classified correctly.</p></details>
+      <details><summary>Where is my data?</summary>
+        <p>Only in this browser (local storage). Nothing is sent anywhere — there is no server. Use <strong>Backup (JSON)</strong> regularly and before switching devices or clearing browser data.</p></details>
+      <details><summary>Rounding</summary>
+        <p>Durations are rounded to the nearest step you choose (e.g. 15 min). Money is rounded to cents per entry, then summed.</p></details>
+    </div>
+    <div class="card">
+      <h2>Getting your missing pay</h2>
+      <p>The report is designed to be handed to HR or payroll. Keep it factual: dates, hours, the rule you applied, the amount. Most gaps are honest mistakes — a missed timesheet line, a wrong multiplier, a holiday treated as a weekday.</p>
+      <ol class="small">
+        <li>Fill in <strong>Pay rules</strong> from your contract or collective agreement.</li>
+        <li>Log every overtime / standby / call-out block as it happens (takes 10 seconds).</li>
+        <li>When the payslip arrives, type the extras into <strong>Summary</strong>.</li>
+        <li>If the gap is real, <strong>Print / save PDF</strong> and use <strong>Copy message to HR</strong>.</li>
+      </ol>
+      <h3 style="margin-top:16px">Keyboard</h3>
+      <p class="small"><kbd>1</kbd>–<kbd>4</kbd> switch tabs · <kbd>N</kbd> focus new entry · <kbd>←</kbd>/<kbd>→</kbd> change month (when not typing)</p>
+      <h3 style="margin-top:16px">License</h3>
+      <p class="small" id="licenseText">Personal license: one person, unlimited devices. ShiftAudit is a calculation aid, not legal or payroll advice; check results against your contract and local law.</p>
+      <p class="small muted">Version v1.0.0 · Support: reply to your purchase receipt email.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>ShiftAudit v1.0.0</span>
+  <span>·</span>
+  <span>Offline · no account · your data stays on your device</span>
+  <span style="flex:1"></span>
+  <a href="#" id="resetAll" class="no-print">Reset everything</a>
+</footer>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+/* ShiftAudit calculation engine — pure functions, no DOM. Also loadable in Node for tests. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.ShiftAuditEngine = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const CATEGORIES = ['overtime', 'weekend', 'holiday', 'callout', 'night', 'standby'];
+  const CATEGORY_LABEL = {
+    overtime: 'Overtime (weekday)',
+    weekend: 'Overtime (rest day)',
+    holiday: 'Overtime (public holiday)',
+    callout: 'Call-outs',
+    night: 'Night premium',
+    standby: 'Standby / on-call'
+  };
+
+  const DEFAULT_RULES = {
+    currency: '€',
+    mode: 'hourly',          // 'hourly' | 'monthly'
+    rate: 12,
+    salary: 2000,
+    salaryHours: 168,
+    mult: { overtime: 1.5, weekend: 2.0, holiday: 2.5, callout: 2.0, night: 0.5 },
+    nightStart: '22:00',
+    nightEnd: '06:00',
+    calloutMinHours: 1,
+    roundMinutes: 15,
+    standbyMode: 'percent',  // 'percent' | 'flat' | 'daily'
+    standbyPct: 20,
+    standbyFlat: 2.5,
+    weekendDays: [0, 6],
+    holidays: [],
+    tolerance: 1
+  };
+
+  const PRESETS = {
+    // Lithuanian Labour Code (DK) minimums: overtime 1.5x (art. 144), rest day 2x, holiday 2.5x,
+    // night work 1.5x (=> +0.5 premium), passive on-call at home >= 20% of average pay (art. 118).
+    lt: { mult: { overtime: 1.5, weekend: 2.0, holiday: 2.5, callout: 2.0, night: 0.5 }, nightStart: '22:00', nightEnd: '06:00', standbyMode: 'percent', standbyPct: 20, calloutMinHours: 1 },
+    generic: { mult: { overtime: 1.5, weekend: 2.0, holiday: 2.0, callout: 1.5, night: 0.25 }, nightStart: '22:00', nightEnd: '06:00', standbyMode: 'flat', standbyFlat: 2.5, calloutMinHours: 1 }
+  };
+
+  const HOLIDAYS = {
+    'LT-2026': ['2026-01-01', '2026-02-16', '2026-03-11', '2026-04-05', '2026-04-06', '2026-05-01', '2026-05-03', '2026-06-07', '2026-06-24', '2026-07-06', '2026-08-15', '2026-11-01', '2026-11-02', '2026-12-24', '2026-12-25', '2026-12-26'],
+    'LT-2027': ['2027-01-01', '2027-02-16', '2027-03-11', '2027-03-28', '2027-03-29', '2027-05-01', '2027-05-02', '2027-06-06', '2027-06-24', '2027-07-06', '2027-08-15', '2027-11-01', '2027-11-02', '2027-12-24', '2027-12-25', '2027-12-26']
+  };
+
+  function toMin(hhmm) {
+    const [h, m] = String(hhmm || '0:0').split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  }
+  function round2(x) { return Math.round((x + Number.EPSILON) * 100) / 100; }
+  function roundHours(minutes, step) {
+    if (!step || step <= 0) return minutes / 60;
+    return Math.round(minutes / step) * step / 60;
+  }
+  function parseDate(iso) { // 'YYYY-MM-DD' -> local Date at 00:00
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  function isoDate(d) {
+    const p = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  function addDays(iso, n) { const d = parseDate(iso); d.setDate(d.getDate() + n); return isoDate(d); }
+
+  function baseRate(rules) {
+    if (rules.mode === 'monthly') {
+      const h = Number(rules.salaryHours) || 0;
+      return h > 0 ? Number(rules.salary) / h : 0;
+    }
+    return Number(rules.rate) || 0;
+  }
+
+  function dayClass(iso, rules) {
+    if ((rules.holidays || []).includes(iso)) return 'holiday';
+    const dow = parseDate(iso).getDay();
+    if ((rules.weekendDays || []).map(Number).includes(dow)) return 'weekend';
+    return 'weekday';
+  }
+
+  /** Duration in minutes; end <= start means it crosses midnight. */
+  function durationMinutes(start, end) {
+    let s = toMin(start), e = toMin(end);
+    if (e <= s) e += 24 * 60;
+    return e - s;
+  }
+
+  /** Minutes of [s,e) (minutes since day start, e may exceed 1440) that fall in the night window. */
+  function nightMinutes(startMin, endMin, nightStart, nightEnd) {
+    const ns = toMin(nightStart), ne = toMin(nightEnd);
+    if (ns === ne) return 0;
+    // Build night intervals over a 3-day span to cover any entry up to 24h that may cross midnight.
+    const windows = [];
+    for (let day = -1; day <= 2; day++) {
+      const off = day * 1440;
+      if (ns < ne) windows.push([off + ns, off + ne]);          // e.g. 01:00-05:00
+      else windows.push([off + ns, off + 1440 + ne]);           // e.g. 22:00-06:00 (crosses midnight)
+    }
+    let total = 0;
+    for (const [ws, we] of windows) {
+      const lo = Math.max(startMin, ws), hi = Math.min(endMin, we);
+      if (hi > lo) total += hi - lo;
+    }
+    return total;
+  }
+
+  /**
+   * Compute one entry. Returns { hours, rateLabel, mult, nightHours, pay, nightPay, category, dayClass, total }.
+   * entry: { date, start, end, kind: 'overtime'|'standby'|'callout', note }
+   */
+  function computeEntry(entry, rules) {
+    const base = baseRate(rules);
+    const dc = dayClass(entry.date, rules);
+    const rawMin = durationMinutes(entry.start, entry.end);
+    let hours = roundHours(rawMin, Number(rules.roundMinutes) || 0);
+    const sMin = toMin(entry.start), eMin = sMin + rawMin;
+    const m = rules.mult || DEFAULT_RULES.mult;
+    const out = { hours, dayClass: dc, nightHours: 0, nightPay: 0, pay: 0, mult: 1, category: 'overtime', rateLabel: '' };
+
+    if (entry.kind === 'standby') {
+      out.category = 'standby';
+      let pay;
+      if (rules.standbyMode === 'flat') { pay = hours * Number(rules.standbyFlat); out.rateLabel = fmtNum(Number(rules.standbyFlat)) + '/h'; }
+      else if (rules.standbyMode === 'daily') {
+        // one calendar day per started 24h block
+        const days = Math.max(1, Math.ceil(rawMin / 1440));
+        pay = days * Number(rules.standbyFlat); out.rateLabel = fmtNum(Number(rules.standbyFlat)) + '/day';
+      } else { pay = hours * base * (Number(rules.standbyPct) / 100); out.rateLabel = Number(rules.standbyPct) + '% of base'; }
+      out.mult = 0; out.pay = round2(pay); out.total = out.pay;
+      return out;
+    }
+
+    // overtime or callout
+    let mult;
+    if (entry.kind === 'callout') {
+      hours = Math.max(hours, Number(rules.calloutMinHours) || 0);
+      out.hours = hours;
+      const dayMult = dc === 'holiday' ? m.holiday : dc === 'weekend' ? m.weekend : 0;
+      mult = Math.max(Number(m.callout), Number(dayMult));
+      out.category = 'callout';
+    } else {
+      mult = dc === 'holiday' ? m.holiday : dc === 'weekend' ? m.weekend : m.overtime;
+      out.category = dc === 'holiday' ? 'holiday' : dc === 'weekend' ? 'weekend' : 'overtime';
+    }
+    out.mult = Number(mult);
+    out.rateLabel = fmtNum(out.mult) + '×';
+    out.pay = round2(hours * base * out.mult);
+    // Night premium on the actual worked span (not the lifted minimum)
+    const nMin = nightMinutes(sMin, eMin, rules.nightStart, rules.nightEnd);
+    out.nightHours = roundHours(nMin, Number(rules.roundMinutes) || 0);
+    out.nightPay = round2(out.nightHours * base * Number(m.night || 0));
+    out.total = round2(out.pay + out.nightPay);
+    return out;
+  }
+
+  function fmtNum(n) { return Number.isInteger(n) ? String(n) : String(round2(n)); }
+
+  /** Aggregate a list of entries (already filtered to a month) into categories. */
+  function summarize(entries, rules) {
+    const cats = {};
+    for (const c of CATEGORIES) cats[c] = { hours: 0, expected: 0 };
+    let totalHours = 0, totalExpected = 0;
+    for (const e of entries) {
+      const r = computeEntry(e, rules);
+      cats[r.category].hours += r.hours;
+      cats[r.category].expected += r.pay;
+      if (r.nightPay) { cats.night.hours += r.nightHours; cats.night.expected += r.nightPay; }
+      totalHours += r.hours;
+      totalExpected += r.total;
+    }
+    for (const c of CATEGORIES) { cats[c].hours = round2(cats[c].hours); cats[c].expected = round2(cats[c].expected); }
+    return { cats, totalHours: round2(totalHours), totalExpected: round2(totalExpected) };
+  }
+
+  function compare(summary, paid, tolerance) {
+    const tol = Number(tolerance) || 0;
+    const rows = {};
+    let totalPaid = 0;
+    for (const c of CATEGORIES) {
+      const p = Number(paid && paid[c]) || 0;
+      totalPaid += p;
+      const gap = round2(summary.cats[c].expected - p);
+      rows[c] = { paid: p, gap, flag: Math.abs(gap) > tol ? (gap > 0 ? 'under' : 'over') : 'ok' };
+    }
+    totalPaid = round2(totalPaid);
+    const totalGap = round2(summary.totalExpected - totalPaid);
+    return { rows, totalPaid, totalGap, flag: Math.abs(totalGap) > tol ? (totalGap > 0 ? 'under' : 'over') : 'ok' };
+  }
+
+  /** Split a long standby block into one entry per calendar day so each day is classified. */
+  function splitByDay(entry) {
+    const total = durationMinutes(entry.start, entry.end);
+    const out = [];
+    let date = entry.date, startMin = toMin(entry.start), remaining = total;
+    while (remaining > 0) {
+      const untilMidnight = 1440 - startMin;
+      const chunk = Math.min(remaining, untilMidnight);
+      const endMin = startMin + chunk;
+      out.push({ ...entry, date, start: mm(startMin), end: mm(endMin === 1440 ? 0 : endMin) });
+      remaining -= chunk; date = addDays(date, 1); startMin = 0;
+    }
+    return out;
+  }
+  function mm(min) { min = ((min % 1440) + 1440) % 1440; return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); }
+
+  return { CATEGORIES, CATEGORY_LABEL, DEFAULT_RULES, PRESETS, HOLIDAYS, baseRate, dayClass, durationMinutes, nightMinutes, computeEntry, summarize, compare, splitByDay, round2, toMin, isoDate, addDays, parseDate };
+});
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const E = window.ShiftAuditEngine;
+  const DEMO = true;
+  const DEMO_LIMIT = 10;
+  const KEY = 'shiftaudit.v1';
+  const $ = (s, r) => (r || document).querySelector(s);
+  const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+
+  // ---------- state ----------
+  const today = E.isoDate(new Date());
+  const thisMonth = today.slice(0, 7);
+  let state = load();
+  let month = thisMonth;
+
+  function load() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { s = null; }
+    if (!s) s = { rules: deepClone(E.DEFAULT_RULES), entries: [], payslips: {}, theme: null };
+    s.rules = Object.assign(deepClone(E.DEFAULT_RULES), s.rules || {});
+    s.rules.mult = Object.assign({}, E.DEFAULT_RULES.mult, (s.rules.mult || {}));
+    s.entries = s.entries || []; s.payslips = s.payslips || {};
+    return s;
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { toast('Could not save — storage blocked?'); } }
+  function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  // ---------- formatting ----------
+  const cur = () => state.rules.currency || '';
+  function money(n) { const v = Number(n) || 0; const s = v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return cur() + s; }
+  function hrs(n) { const v = Number(n) || 0; return (Math.round(v * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' h'; }
+  function monthLabel(ym) { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }); }
+  function dateLabel(iso) { return E.parseDate(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); }
+  const KIND_LABEL = { overtime: 'Overtime', standby: 'Standby', callout: 'Call-out' };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  let toastTimer;
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200); }
+
+  // ---------- tabs ----------
+  function showTab(name) {
+    $$('nav.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    $$('section[role=tabpanel]').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+    if (name === 'summary') renderSummary();
+    if (name === 'rules') fillRulesForm();
+    try { localStorage.setItem(KEY + '.tab', name); } catch (e) {}
+  }
+  $$('nav.tabs [role=tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+  // ---------- theme ----------
+  function applyTheme() { if (state.theme) document.documentElement.dataset.theme = state.theme; else delete document.documentElement.dataset.theme; }
+  $('#themeBtn').addEventListener('click', () => {
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const current = state.theme || (dark ? 'dark' : 'light');
+    state.theme = current === 'dark' ? 'light' : 'dark'; save(); applyTheme();
+  });
+
+  // ---------- month nav ----------
+  function setMonth(ym) { month = ym; $('#monthLog').value = ym; $('#monthSum').value = ym; renderEntries(); renderSummary(); }
+  function shiftMonth(n) { const [y, m] = month.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); setMonth(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); }
+  $('#monthLog').addEventListener('change', e => e.target.value && setMonth(e.target.value));
+  $('#monthSum').addEventListener('change', e => e.target.value && setMonth(e.target.value));
+  $('#prevMonthLog').onclick = $('#prevMonthSum').onclick = () => shiftMonth(-1);
+  $('#nextMonthLog').onclick = $('#nextMonthSum').onclick = () => shiftMonth(1);
+
+  // ---------- entries ----------
+  const form = $('#entryForm');
+  $('#eDate').value = today;
+  function entryFromForm() {
+    return { id: $('#eId').value || uid(), date: $('#eDate').value, kind: $('#eKind').value, start: $('#eStart').value, end: $('#eEnd').value, note: $('#eNote').value.trim() };
+  }
+  function previewEntry() {
+    const e = entryFromForm();
+    if (!e.date || !e.start || !e.end) { $('#entryPreview').textContent = ''; return; }
+    const r = E.computeEntry(e, state.rules);
+    $('#entryPreview').textContent = breakdown(r, e);
+  }
+  function breakdown(r, e) {
+    const base = E.baseRate(state.rules);
+    if (e.kind === 'standby') return `${hrs(r.hours)} standby × ${r.rateLabel} = ${money(r.total)} (${r.dayClass})`;
+    let s = `${hrs(r.hours)} × ${money(base)} × ${r.rateLabel} = ${money(r.pay)}`;
+    if (r.nightPay) s += `  +  night ${hrs(r.nightHours)} × ${money(base)} × ${state.rules.mult.night} = ${money(r.nightPay)}`;
+    return s + `  →  ${money(r.total)} (${r.dayClass})`;
+  }
+  ['eDate', 'eKind', 'eStart', 'eEnd'].forEach(id => $('#' + id).addEventListener('input', previewEntry));
+
+  form.addEventListener('submit', ev => {
+    ev.preventDefault();
+    const e = entryFromForm();
+    if (!e.date || !e.start || !e.end) return;
+    const editing = state.entries.some(x => x.id === e.id);
+    if (!editing && DEMO && state.entries.length >= DEMO_LIMIT) return demoWall();
+    if (editing) state.entries = state.entries.map(x => x.id === e.id ? e : x); else state.entries.push(e);
+    save(); resetForm(); setMonth(e.date.slice(0, 7)); toast(editing ? 'Entry updated' : 'Entry added');
+  });
+  function resetForm() { $('#eId').value = ''; $('#eNote').value = ''; $('#saveBtn').textContent = 'Add entry'; $('#cancelEdit').hidden = true; previewEntry(); }
+  $('#cancelEdit').addEventListener('click', resetForm);
+  function editEntry(id) {
+    const e = state.entries.find(x => x.id === id); if (!e) return;
+    $('#eId').value = e.id; $('#eDate').value = e.date; $('#eKind').value = e.kind; $('#eStart').value = e.start; $('#eEnd').value = e.end; $('#eNote').value = e.note || '';
+    $('#saveBtn').textContent = 'Save changes'; $('#cancelEdit').hidden = false; previewEntry(); $('#eDate').focus(); window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function deleteEntry(id) { state.entries = state.entries.filter(x => x.id !== id); save(); renderEntries(); renderSummary(); toast('Entry deleted'); }
+
+  $$('[data-quick]').forEach(b => b.addEventListener('click', () => {
+    const date = $('#eDate').value || today;
+    let block;
+    if (b.dataset.quick === 'standby-weekend') {
+      // find the Friday on/before the chosen date
+      const d = E.parseDate(date); const back = (d.getDay() - 5 + 7) % 7; const fri = E.addDays(date, -back);
+      block = { date: fri, start: '18:00', end: '08:00', kind: 'standby', note: 'Weekend standby' };
+      // Fri 18:00 -> Mon 08:00 = 62h; splitByDay only handles up to 24h per call, so build explicitly
+      const parts = [
+        { ...block, date: fri, start: '18:00', end: '00:00' },
+        { ...block, date: E.addDays(fri, 1), start: '00:00', end: '00:00' },
+        { ...block, date: E.addDays(fri, 2), start: '00:00', end: '00:00' },
+        { ...block, date: E.addDays(fri, 3), start: '00:00', end: '08:00' }
+      ];
+      return addMany(parts);
+    }
+    block = { date, start: '18:00', end: '08:00', kind: 'standby', note: 'Night standby' };
+    addMany(E.splitByDay(block));
+  }));
+  function addMany(parts) {
+    if (DEMO && state.entries.length + parts.length > DEMO_LIMIT) return demoWall();
+    parts.forEach(p => state.entries.push({ ...p, id: uid() }));
+    save(); setMonth(parts[0].date.slice(0, 7)); toast(parts.length + ' entries added');
+  }
+
+  function entriesIn(ym) { return state.entries.filter(e => e.date.startsWith(ym)).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start)); }
+
+  function renderEntries() {
+    const list = entriesIn(month);
+    const tb = $('#entriesTable tbody'); tb.innerHTML = '';
+    $('#entriesEmpty').hidden = list.length > 0;
+    $('#entriesTable').style.display = list.length ? '' : 'none';
+    let total = 0, hours = 0;
+    for (const e of list) {
+      const r = E.computeEntry(e, state.rules); total += r.total; hours += r.hours;
+      const tr = document.createElement('tr');
+      const dayTag = r.dayClass !== 'weekday' ? ` <span class="tag ${r.dayClass}">${r.dayClass === 'weekend' ? 'rest day' : 'holiday'}</span>` : '';
+      tr.innerHTML = `<td>${dateLabel(e.date)}</td>
+        <td><span class="tag ${e.kind}">${KIND_LABEL[e.kind]}</span>${dayTag}</td>
+        <td class="small">${e.start}–${e.end}${E.durationMinutes(e.start, e.end) + E.toMin(e.start) > 1440 ? ' <span class="muted">+1d</span>' : ''}</td>
+        <td class="num">${hrs(r.hours)}${r.nightHours ? `<div class="small muted">${hrs(r.nightHours)} night</div>` : ''}</td>
+        <td class="small">${r.rateLabel}${r.nightPay ? `<div class="muted">+${state.rules.mult.night}× night</div>` : ''}</td>
+        <td class="num">${money(r.total)}</td>
+        <td class="small">${esc(e.note)}</td>
+        <td class="no-print" style="white-space:nowrap"><button class="btn sm" data-edit="${e.id}">Edit</button> <button class="btn sm danger" data-del="${e.id}">✕</button></td>`;
+      tb.appendChild(tr);
+    }
+    if (list.length) {
+      const tr = document.createElement('tr'); tr.className = 'total';
+      tr.innerHTML = `<td colspan="3">${list.length} entries in ${monthLabel(month)}</td><td class="num">${hrs(hours)}</td><td></td><td class="num">${money(total)}</td><td colspan="2"></td>`;
+      tb.appendChild(tr);
+    }
+    $$('[data-edit]', tb).forEach(b => b.onclick = () => editEntry(b.dataset.edit));
+    $$('[data-del]', tb).forEach(b => b.onclick = () => deleteEntry(b.dataset.del));
+  }
+
+  $('#clearMonth').addEventListener('click', () => {
+    const n = entriesIn(month).length; if (!n) return toast('Nothing to delete');
+    if (!confirm(`Delete all ${n} entries in ${monthLabel(month)}? This cannot be undone.`)) return;
+    state.entries = state.entries.filter(e => !e.date.startsWith(month)); save(); renderEntries(); renderSummary(); toast('Month cleared');
+  });
+
+  // ---------- summary ----------
+  function payslip(ym) { return state.payslips[ym] || (state.payslips[ym] = { paid: {}, note: '' }); }
+
+  function renderSummary() {
+    const list = entriesIn(month);
+    const sum = E.summarize(list, state.rules);
+    const ps = payslip(month);
+    const cmp = E.compare(sum, ps.paid, state.rules.tolerance);
+    const base = E.baseRate(state.rules);
+    $('#sExpected').textContent = money(sum.totalExpected);
+    $('#sHours').textContent = `${hrs(sum.totalHours)} logged · base ${money(base)}/h`;
+    $('#sPaid').textContent = money(cmp.totalPaid);
+    const g = $('#sGap'); g.textContent = (cmp.totalGap > 0 ? '−' : cmp.totalGap < 0 ? '+' : '') + money(Math.abs(cmp.totalGap));
+    g.className = 'v ' + (cmp.flag === 'under' ? 'bad' : cmp.flag === 'over' ? 'ok' : '');
+    $('#sGapNote').textContent = cmp.flag === 'under' ? 'you appear to be underpaid' : cmp.flag === 'over' ? 'paid more than expected' : cmp.totalPaid ? 'matches within tolerance' : 'expected − paid';
+    $('#printMeta').textContent = `${monthLabel(month)} · generated ${new Date().toLocaleDateString()} · base rate ${money(base)}/h`;
+
+    const tb = $('#summaryTable tbody'); tb.innerHTML = '';
+    const m = state.rules.mult;
+    const rateLabel = { overtime: m.overtime + '×', weekend: m.weekend + '×', holiday: m.holiday + '×', callout: m.callout + '× (min ' + state.rules.calloutMinHours + ' h)', night: '+' + m.night + '× base', standby: state.rules.standbyMode === 'percent' ? state.rules.standbyPct + '% of base' : money(state.rules.standbyFlat) + (state.rules.standbyMode === 'daily' ? '/day' : '/h') };
+    for (const c of E.CATEGORIES) {
+      const row = sum.cats[c], r = cmp.rows[c];
+      if (!row.hours && !r.paid && !row.expected) continue;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${E.CATEGORY_LABEL[c]}</td><td class="num">${hrs(row.hours)}</td><td class="small rate-col">${rateLabel[c]}</td><td class="num">${money(row.expected)}</td>
+        <td class="num"><input type="number" step="0.01" min="0" inputmode="decimal" data-paid="${c}" value="${r.paid ? r.paid : ''}" placeholder="0.00" aria-label="Paid for ${E.CATEGORY_LABEL[c]}"></td>
+        <td class="num gap ${r.flag === 'ok' ? 'zero' : r.flag}">${r.gap > 0 ? '−' : r.gap < 0 ? '+' : ''}${money(Math.abs(r.gap))}</td>`;
+      tb.appendChild(tr);
+    }
+    // always show at least one editable row if nothing logged
+    if (!tb.children.length) { tb.innerHTML = `<tr><td colspan="6" class="muted">No entries logged in ${monthLabel(month)}. Add them in the Log tab.</td></tr>`; }
+    const tr = document.createElement('tr'); tr.className = 'total';
+    tr.innerHTML = `<td>Total</td><td class="num">${hrs(sum.totalHours)}</td><td class="rate-col"></td><td class="num">${money(sum.totalExpected)}</td><td class="num">${money(cmp.totalPaid)}</td><td class="num gap ${cmp.flag === 'ok' ? 'zero' : cmp.flag}">${cmp.totalGap > 0 ? '−' : cmp.totalGap < 0 ? '+' : ''}${money(Math.abs(cmp.totalGap))}</td>`;
+    tb.appendChild(tr);
+    $$('[data-paid]', tb).forEach(inp => inp.addEventListener('change', () => {
+      const v = parseFloat(inp.value); ps.paid[inp.dataset.paid] = isNaN(v) ? 0 : v; save(); renderSummary();
+    }));
+    $('#payNote').value = ps.note || '';
+    renderYear();
+  }
+  $('#payNote').addEventListener('change', () => { payslip(month).note = $('#payNote').value; save(); });
+
+  function renderYear() {
+    const year = month.slice(0, 4);
+    $('#yearLabel').textContent = year;
+    const tb = $('#yearTable tbody'); tb.innerHTML = '';
+    let tH = 0, tE = 0, tP = 0;
+    for (let i = 1; i <= 12; i++) {
+      const ym = year + '-' + String(i).padStart(2, '0');
+      const list = entriesIn(ym); const ps = state.payslips[ym];
+      if (!list.length && !(ps && Object.values(ps.paid || {}).some(Boolean))) continue;
+      const sum = E.summarize(list, state.rules); const cmp = E.compare(sum, ps ? ps.paid : {}, state.rules.tolerance);
+      tH += sum.totalHours; tE += sum.totalExpected; tP += cmp.totalPaid;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><a href="#" data-month="${ym}">${monthLabel(ym)}</a></td><td class="num">${hrs(sum.totalHours)}</td><td class="num">${money(sum.totalExpected)}</td><td class="num">${money(cmp.totalPaid)}</td><td class="num gap ${cmp.flag === 'ok' ? 'zero' : cmp.flag}">${cmp.totalGap > 0 ? '−' : cmp.totalGap < 0 ? '+' : ''}${money(Math.abs(cmp.totalGap))}</td>`;
+      tb.appendChild(tr);
+    }
+    if (!tb.children.length) tb.innerHTML = `<tr><td colspan="5" class="muted">Nothing logged in ${year} yet.</td></tr>`;
+    else { const tr = document.createElement('tr'); tr.className = 'total'; const gap = E.round2(tE - tP); tr.innerHTML = `<td>Year total</td><td class="num">${hrs(tH)}</td><td class="num">${money(tE)}</td><td class="num">${money(tP)}</td><td class="num gap ${Math.abs(gap) > state.rules.tolerance ? (gap > 0 ? 'under' : 'over') : 'zero'}">${gap > 0 ? '−' : gap < 0 ? '+' : ''}${money(Math.abs(gap))}</td>`; tb.appendChild(tr); }
+    $$('[data-month]', tb).forEach(a => a.onclick = ev => { ev.preventDefault(); setMonth(a.dataset.month); });
+  }
+
+  $('#printBtn').addEventListener('click', () => { renderSummary(); window.print(); });
+  $('#copyHr').addEventListener('click', async () => {
+    const list = entriesIn(month); const sum = E.summarize(list, state.rules); const ps = payslip(month); const cmp = E.compare(sum, ps.paid, state.rules.tolerance);
+    const lines = [];
+    lines.push(`Subject: Overtime / on-call pay check — ${monthLabel(month)}`, '', 'Hi,', '', `I compared my ${monthLabel(month)} payslip with my logged overtime and on-call hours and found a difference of ${money(Math.abs(cmp.totalGap))} (${cmp.totalGap > 0 ? 'underpaid' : 'overpaid'}). Details:`, '');
+    for (const c of E.CATEGORIES) { const row = sum.cats[c]; const r = cmp.rows[c]; if (!row.hours && !r.paid) continue; lines.push(`- ${E.CATEGORY_LABEL[c]}: ${hrs(row.hours)} → expected ${money(row.expected)}, paid ${money(r.paid)}, difference ${money(Math.abs(r.gap))}`); }
+    lines.push('', 'Logged entries:');
+    for (const e of list) { const r = E.computeEntry(e, state.rules); lines.push(`- ${e.date} ${e.start}–${e.end} ${KIND_LABEL[e.kind]} (${r.dayClass}): ${hrs(r.hours)} → ${money(r.total)}${e.note ? ' — ' + e.note : ''}`); }
+    lines.push('', `Base rate used: ${money(E.baseRate(state.rules))}/h. Multipliers: weekday overtime ${state.rules.mult.overtime}×, rest day ${state.rules.mult.weekend}×, holiday ${state.rules.mult.holiday}×, call-out ${state.rules.mult.callout}×, night +${state.rules.mult.night}×, standby ${state.rules.standbyMode === 'percent' ? state.rules.standbyPct + '% of base' : money(state.rules.standbyFlat) + (state.rules.standbyMode === 'daily' ? '/day' : '/h')}.`, '', 'Could you please check and let me know? Happy to share the detailed report.', '', 'Thank you');
+    try { await navigator.clipboard.writeText(lines.join('\n')); toast('Message copied — paste it into your email'); } catch (e) { prompt('Copy this message:', lines.join('\n')); }
+  });
+
+  // ---------- rules ----------
+  const R = state.rules;
+  function fillRulesForm() {
+    const r = state.rules;
+    $('#rCurrency').value = r.currency; $('#rMode').value = r.mode; $('#rRate').value = r.rate; $('#rSalary').value = r.salary; $('#rSalaryHours').value = r.salaryHours;
+    $('#rOvertime').value = r.mult.overtime; $('#rWeekend').value = r.mult.weekend; $('#rHoliday').value = r.mult.holiday; $('#rCallout').value = r.mult.callout; $('#rNight').value = r.mult.night;
+    $('#rNightStart').value = r.nightStart; $('#rNightEnd').value = r.nightEnd; $('#rCalloutMin').value = r.calloutMinHours; $('#rRound').value = String(r.roundMinutes);
+    $('#rStandbyMode').value = r.standbyMode; $('#rStandbyPct').value = r.standbyPct; $('#rStandbyFlat').value = r.standbyFlat;
+    $$('#weekendDays input').forEach(cb => cb.checked = r.weekendDays.map(Number).includes(Number(cb.value)));
+    $('#rHolidays').value = (r.holidays || []).join('\n'); $('#rTolerance').value = r.tolerance;
+    toggleRuleFields(); $('#rulesSaved').textContent = '';
+  }
+  function rulesFromForm() {
+    const r = deepClone(state.rules);
+    r.currency = $('#rCurrency').value.trim() || ''; r.mode = $('#rMode').value; r.rate = +$('#rRate').value || 0; r.salary = +$('#rSalary').value || 0; r.salaryHours = +$('#rSalaryHours').value || 0;
+    r.mult = { overtime: +$('#rOvertime').value || 0, weekend: +$('#rWeekend').value || 0, holiday: +$('#rHoliday').value || 0, callout: +$('#rCallout').value || 0, night: +$('#rNight').value || 0 };
+    r.nightStart = $('#rNightStart').value || '22:00'; r.nightEnd = $('#rNightEnd').value || '06:00'; r.calloutMinHours = +$('#rCalloutMin').value || 0; r.roundMinutes = +$('#rRound').value || 0;
+    r.standbyMode = $('#rStandbyMode').value; r.standbyPct = +$('#rStandbyPct').value || 0; r.standbyFlat = +$('#rStandbyFlat').value || 0;
+    r.weekendDays = $$('#weekendDays input:checked').map(cb => Number(cb.value));
+    r.holidays = Array.from(new Set($('#rHolidays').value.split(/\r?\n|,|;/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s)))).sort();
+    r.tolerance = +$('#rTolerance').value || 0;
+    return r;
+  }
+  function toggleRuleFields() {
+    const monthly = $('#rMode').value === 'monthly';
+    $('#fHourly').hidden = monthly; $('#fSalary').hidden = !monthly; $('#fSalaryHours').hidden = !monthly;
+    const sm = $('#rStandbyMode').value; $('#fStandbyPct').hidden = sm !== 'percent'; $('#fStandbyFlat').hidden = sm === 'percent';
+    $('#rEffective').textContent = money(E.baseRate(rulesFromForm())) ;
+  }
+  ['rMode', 'rStandbyMode', 'rRate', 'rSalary', 'rSalaryHours', 'rCurrency'].forEach(id => $('#' + id).addEventListener('input', toggleRuleFields));
+  $('#saveRules').addEventListener('click', () => { state.rules = rulesFromForm(); save(); $('#rulesSaved').textContent = 'Saved ✓'; renderEntries(); renderSummary(); previewEntry(); toast('Pay rules saved'); });
+  $$('[data-preset]').forEach(b => b.addEventListener('click', () => {
+    const p = E.PRESETS[b.dataset.preset]; if (!p) return;
+    const r = Object.assign(rulesFromForm(), deepClone(p)); state.rules = r; fillRulesForm(); $('#rulesSaved').textContent = 'Preset loaded — click Save rules';
+  }));
+  $$('[data-holidays]').forEach(b => b.addEventListener('click', () => {
+    const ta = $('#rHolidays');
+    if (b.dataset.holidays === 'clear') { ta.value = ''; return; }
+    const cur = ta.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const merged = Array.from(new Set(cur.concat(E.HOLIDAYS[b.dataset.holidays] || []))).sort();
+    ta.value = merged.join('\n');
+  }));
+
+  // ---------- import / export ----------
+  function csvEscape(v) { v = String(v == null ? '' : v); return /[",\n;]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function download(name, text, type) {
+    const blob = new Blob([text], { type: type || 'text/plain' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  $('#exportCsv').addEventListener('click', () => {
+    if (DEMO) return demoWall();
+    const rows = [['date', 'kind', 'start', 'end', 'hours', 'day_class', 'multiplier', 'night_hours', 'expected_pay', 'note']];
+    for (const e of state.entries.slice().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))) { const r = E.computeEntry(e, state.rules); rows.push([e.date, e.kind, e.start, e.end, r.hours, r.dayClass, r.mult, r.nightHours, r.total, e.note || '']); }
+    download('shiftaudit-entries.csv', rows.map(r => r.map(csvEscape).join(',')).join('\n'), 'text/csv');
+  });
+  $('#importCsvBtn').addEventListener('click', () => { if (DEMO) return demoWall(); $('#importCsv').click(); });
+  $('#importCsv').addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return; const text = await f.text(); ev.target.value = '';
+    const lines = parseCsv(text); if (lines.length < 2) return toast('CSV looks empty');
+    const head = lines[0].map(h => h.trim().toLowerCase()); const ix = n => head.indexOf(n);
+    if (ix('date') < 0 || ix('start') < 0 || ix('end') < 0) return toast('CSV needs columns: date, kind, start, end, note');
+    let n = 0;
+    for (const row of lines.slice(1)) {
+      if (!row[ix('date')]) continue; const kind = (row[ix('kind')] || 'overtime').trim().toLowerCase();
+      state.entries.push({ id: uid(), date: row[ix('date')].trim(), kind: KIND_LABEL[kind] ? kind : 'overtime', start: row[ix('start')].trim(), end: row[ix('end')].trim(), note: ix('note') >= 0 ? (row[ix('note')] || '').trim() : '' }); n++;
+    }
+    save(); renderEntries(); renderSummary(); toast(`Imported ${n} entries`);
+  });
+  function parseCsv(text) {
+    const out = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+      else if (c === '"') q = true; else if (c === ',' || c === ';') { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); out.push(row); row = []; cell = ''; }
+      else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); out.push(row); }
+    return out.filter(r => r.some(x => x !== ''));
+  }
+  $('#backupJson').addEventListener('click', () => { if (DEMO) return demoWall(); download('shiftaudit-backup-' + today + '.json', JSON.stringify(state, null, 2), 'application/json'); });
+  $('#restoreJsonBtn').addEventListener('click', () => $('#restoreJson').click());
+  $('#restoreJson').addEventListener('change', async ev => {
+    const f = ev.target.files[0]; if (!f) return; ev.target.value = '';
+    try { const s = JSON.parse(await f.text()); if (!s || !Array.isArray(s.entries)) throw 0; if (!confirm('Replace all current data with this backup?')) return; localStorage.setItem(KEY, JSON.stringify(s)); state = load(); applyTheme(); setMonth(month); fillRulesForm(); toast('Backup restored'); }
+    catch (e) { toast('That file is not a ShiftAudit backup'); }
+  });
+  $('#resetAll').addEventListener('click', ev => { ev.preventDefault(); if (!confirm('Delete ALL entries, payslips and rules on this device?')) return; localStorage.removeItem(KEY); state = load(); applyTheme(); setMonth(thisMonth); fillRulesForm(); toast('Everything reset'); });
+
+  // ---------- demo ----------
+  function demoWall() { toast('Free demo: up to ' + DEMO_LIMIT + ' entries, no exports. Get the full version to unlock.'); $('#demoBanner').scrollIntoView({ behavior: 'smooth' }); return false; }
+  if (DEMO) { $('#demoBanner').hidden = false; $('#demoLimit').textContent = DEMO_LIMIT; $('#licenseText').textContent = 'This is the free demo. The full version has unlimited entries, CSV/JSON export and import, and a personal license for unlimited devices.'; }
+
+  // ---------- keyboard ----------
+  document.addEventListener('keydown', ev => {
+    const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+    if (typing || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    if (ev.key === '1') showTab('log'); else if (ev.key === '2') showTab('summary'); else if (ev.key === '3') showTab('rules'); else if (ev.key === '4') showTab('help');
+    else if (ev.key.toLowerCase() === 'n') { showTab('log'); $('#eDate').focus(); }
+    else if (ev.key === 'ArrowLeft') shiftMonth(-1); else if (ev.key === 'ArrowRight') shiftMonth(1);
+  });
+
+  // ---------- boot ----------
+  applyTheme();
+  setMonth(thisMonth);
+  fillRulesForm();
+  previewEntry();
+  let lastTab = null; try { lastTab = localStorage.getItem(KEY + '.tab'); } catch (e) {}
+  if (lastTab && $('#panel-' + lastTab)) showTab(lastTab);
+  if (!state.entries.length && !DEMO) { /* first run: nothing to do */ }
+})();
+
+</script>
+</body>
+</html>
