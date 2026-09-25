@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShiftAudit — Find the overtime and on-call pay your payslip missed</title>
+<meta name="description" content="Log overtime, night, weekend, holiday and standby hours. ShiftAudit computes what your payslip should show, flags every gap, and prints a report HR can act on. Offline, private, one-time purchase.">
+<meta property="og:title" content="ShiftAudit — On-call & overtime pay checker">
+<meta property="og:description" content="Know exactly what your overtime and on-call hours should have paid. Log shifts, compare with your payslip, print the report.">
+<meta property="og:image" content="https://mrponas.github.io/shiftaudit/img/summary.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M9 17l4 4 10-10' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--panel2:#eef1f4;--line:#e3e6ea;--text:#15191f;--muted:#5f6b7a;--accent:#0f766e;--accent-ink:#fff;--accent-soft:#e0f2f0;--bad:#b91c1c;--ok:#15803d;--radius:14px;--shadow:0 1px 2px rgba(0,0,0,.05),0 12px 32px -16px rgba(0,0,0,.25)}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1116;--panel:#161a21;--panel2:#1d222b;--line:#2a303a;--text:#e8ebef;--muted:#9aa5b4;--accent:#2dd4bf;--accent-ink:#06251f;--accent-soft:#12302d;--bad:#f87171;--ok:#4ade80;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -16px rgba(0,0,0,.7)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent)}
+.wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+header{display:flex;align-items:center;gap:10px;padding:18px 0}
+.logo{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center}
+.logo svg{width:18px;height:18px}
+header b{font-size:1.1rem}
+header nav{margin-left:auto;display:flex;gap:16px;font-weight:600;font-size:.95rem}
+header nav a{color:var(--muted);text-decoration:none}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:10px;font-weight:700;text-decoration:none;border:1px solid var(--line);background:var(--panel);color:var(--text)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.big{font-size:1.05rem;padding:14px 24px}
+.hero{padding:40px 0 30px;display:grid;grid-template-columns:1.1fr 1fr;gap:40px;align-items:center}
+@media (max-width:820px){.hero{grid-template-columns:1fr}}
+h1{font-size:2.6rem;line-height:1.1;letter-spacing:-.03em;margin:0 0 16px}
+@media (max-width:600px){h1{font-size:2rem}}
+.lead{font-size:1.15rem;color:var(--muted);margin:0 0 22px}
+.cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.cta small{color:var(--muted);flex-basis:100%}
+.shot{border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden;background:var(--panel)}
+.shot img{display:block;width:100%;height:auto}
+section{padding:36px 0}
+h2{font-size:1.7rem;letter-spacing:-.02em;margin:0 0 8px}
+.sub{color:var(--muted);margin:0 0 24px;font-size:1.05rem}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:820px){.cards{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+.card h3{margin:0 0 6px;font-size:1.05rem}
+.card p{margin:0;color:var(--muted);font-size:.95rem}
+.step{display:flex;gap:14px}
+.step .n{flex:none;width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:800;display:grid;place-items:center}
+.pricing{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:760px;margin:0 auto}
+@media (max-width:700px){.pricing{grid-template-columns:1fr}}
+.price{font-size:2.4rem;font-weight:800;letter-spacing:-.03em}
+.price small{font-size:1rem;color:var(--muted);font-weight:500}
+.plan ul{padding-left:18px;margin:12px 0 18px;color:var(--muted)}
+.plan li{margin:4px 0}
+.plan.pro{border-color:var(--accent);box-shadow:var(--shadow)}
+.faq details{border-bottom:1px solid var(--line);padding:12px 0}
+.faq summary{font-weight:600;cursor:pointer}
+.faq p{color:var(--muted);margin:8px 0 0}
+.quote{background:var(--accent-soft);border-radius:var(--radius);padding:20px 24px;font-size:1.05rem}
+.quote b{display:block;margin-top:8px;font-size:.9rem;color:var(--muted);font-weight:600}
+footer{padding:30px 0 50px;color:var(--muted);font-size:.9rem;border-top:1px solid var(--line);margin-top:20px}
+.tag{display:inline-block;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:.8rem;padding:3px 10px;border-radius:999px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 17l4 4 10-10" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <b>ShiftAudit</b>
+  <nav><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="demo/">Demo</a></nav>
+</header>
+
+<section class="hero">
+  <div>
+    <span class="tag">For anyone paid for overtime, nights, weekends or on-call</span>
+    <h1>Your payslip is wrong more often than you think.</h1>
+    <p class="lead">ShiftAudit logs every overtime, night, weekend, holiday and standby hour, computes what you <em>should</em> have been paid under your contract, and flags every gap — with a report HR can act on.</p>
+    <div class="cta">
+      <a class="btn primary big" href="https://ponasslam.gumroad.com/l/shiftaudit">Get ShiftAudit — €9 one-time</a>
+      <a class="btn big" href="demo/">Try the free demo</a>
+      <small>One file. Works offline. No account, no subscription, no data leaves your device.</small>
+    </div>
+  </div>
+  <div class="shot"><img src="img/summary.png" alt="ShiftAudit month summary showing expected pay, payslip amount and a €186 gap flagged in red" width="1280" height="720"></div>
+</section>
+
+<section id="how">
+  <h2>How it works</h2>
+  <p class="sub">Ten seconds per shift. One check per payslip.</p>
+  <div class="cards">
+    <div class="card step"><div class="n">1</div><div><h3>Set your pay rules once</h3><p>Base rate or monthly salary, multipliers for weekday / rest-day / holiday overtime, night premium and window, call-out minimum, standby rate (% of base, hourly or daily). Presets included.</p></div></div>
+    <div class="card step"><div class="n">2</div><div><h3>Log shifts as they happen</h3><p>Date, type, start, end. Entries crossing midnight just work. One click adds a full weekend standby block, split per day so rest days and holidays are priced correctly.</p></div></div>
+    <div class="card step"><div class="n">3</div><div><h3>Check the payslip</h3><p>Type the extras from your payslip. ShiftAudit shows the gap per category and for the month, then prints a clean PDF report and writes the message to HR for you.</p></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="shot"><img src="img/log.png" alt="ShiftAudit log with overtime, call-out and standby entries, each with hours, multiplier and expected pay" width="1280" height="800" loading="lazy"></div>
+</section>
+
+<section>
+  <h2>Built for the people who actually carry the pager</h2>
+  <p class="sub">IT operations, support engineers, DevOps on rotation, nurses, technicians, security, logistics — anyone whose extra hours are paid by rules that payroll gets wrong.</p>
+  <div class="cards">
+    <div class="card"><h3>Transparent math</h3><p>Every entry shows its formula: hours × base × multiplier + night premium. No black box, so you can defend every number.</p></div>
+    <div class="card"><h3>Any contract, any country</h3><p>All rates are yours to set. Ships with a Lithuanian Labour Code preset and a generic 1.5× / 2× preset; public holidays are a simple list.</p></div>
+    <div class="card"><h3>Private by design</h3><p>A single HTML file that runs in your browser, offline. Nothing is uploaded anywhere. Backup and restore with one click.</p></div>
+    <div class="card"><h3>Payslip comparison</h3><p>Per-category and monthly gaps with a tolerance so cents of rounding don't nag you. Year overview shows how much is still owed.</p></div>
+    <div class="card"><h3>HR-ready report</h3><p>Print or save as PDF: summary, every logged entry, the rules applied. Plus a "Copy message to HR" button that drafts the email.</p></div>
+    <div class="card"><h3>Your data, exportable</h3><p>CSV export and import, JSON backup. Keep your records for as long as your labour law lets you claim.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="quote">"I logged one weekend of standby and two call-outs. The report found €124 my payslip skipped. Paid for itself thirteen times over on the first month."<b>— not a customer quote yet; it's the scenario from the demo data. Try the demo and see what your own last month was worth.</b></div>
+</section>
+
+<section id="pricing">
+  <h2>Pricing</h2>
+  <p class="sub">Pay once. Use it for as long as you have a job that owes you overtime.</p>
+  <div class="pricing">
+    <div class="card plan">
+      <h3>Free demo</h3>
+      <div class="price">€0</div>
+      <ul><li>All pay rules and calculations</li><li>Up to 10 entries</li><li>Payslip comparison</li><li>No exports</li></ul>
+      <a class="btn" href="demo/">Open the demo</a>
+    </div>
+    <div class="card plan pro">
+      <h3>ShiftAudit full version</h3>
+      <div class="price">€9 <small>one-time · launch price</small></div>
+      <ul><li>Unlimited entries, unlimited months</li><li>CSV export / import, JSON backup</li><li>PDF report + HR message</li><li>Personal license, all your devices</li><li>Free updates for v1.x</li></ul>
+      <a class="btn primary" href="https://ponasslam.gumroad.com/l/shiftaudit">Buy now — instant download</a>
+      <p style="margin:10px 0 0;font-size:.85rem;color:var(--muted)">Secure checkout. If it doesn't find you anything in 30 days, reply to your receipt and get a refund.</p>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="faq">
+  <h2>Questions</h2>
+  <details open><summary>Is this legal or payroll advice?</summary><p>No. ShiftAudit applies the rates <em>you</em> enter. Check your contract, collective agreement and local labour law, and use the report as a starting point for a conversation with HR.</p></details>
+  <details><summary>Does it work for my country?</summary><p>Yes, if your extras are computed as multiples of a base rate (the case almost everywhere). Multipliers, night window, weekend days, holidays and standby rules are all configurable.</p></details>
+  <details><summary>Where is my data stored?</summary><p>Only in your browser's local storage, on your device. There is no server and no account. Use the backup button to move between devices.</p></details>
+  <details><summary>How do I "install" it?</summary><p>Download the file and open it in any modern browser (Chrome, Edge, Firefox, Safari). Bookmark it. On a phone, open it from Files and "Add to Home Screen".</p></details>
+  <details><summary>Can my team or company use it?</summary><p>The personal license covers one person. For teams, unions or HR departments, write to us — a team license and a shared-rules setup are on the roadmap.</p></details>
+  <details><summary>What if I find a bug or need a rule you don't support?</summary><p>Email support and describe your contract rule. Reasonable requests ship as free v1.x updates.</p></details>
+</section>
+
+<footer>
+  <div>© 2026 ShiftAudit · Questions? Write via the <a href="https://ponasslam.gumroad.com/l/shiftaudit">product page</a> or reply to your receipt · Made in Lithuania</div>
+</footer>
+</div>
+</body>
+</html>
